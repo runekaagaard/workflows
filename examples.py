@@ -5,8 +5,9 @@ from workflows.features import *
 
 @workflow
 def fib(n):
-    yield case(n == 0, 0)
-    yield case(n == 1, lambda: n)
+    # unless is opposite of when.
+    yield when(n == 0, returns(0))
+    yield when(n == 1, returns(1))
     yield returns(fib(n-1) + fib(n-2))
 
 print fib(10)
@@ -23,53 +24,36 @@ print sums(2, 4, 8, 16, 32)
 @workflow
 def sum_and_product(*args):
     for arg in args:
-        yield fold(lambda x: x*arg, name='product', initial=1)
+        yield fold(lambda x: x*arg, initial=1, name='product')
         yield fold(lambda x: x+arg, name='sum')
 
 print sum_and_product(2, 4, 8, 16, 32)
 
 
 @workflow
-def handle_errors_1():
-    yield add_fail_guard(KeyError, 92)
-    yield add_fail_guard(AttributeError, lambda state: state)
-
-    yield fold(lambda x: x + 42)
-    yield fold(lambda x: x + 42)
-
-    x = {}
-    x['foo']
+def x_dot_y(cfg):
+    x = yield read_or(lambda: cfg['x'], do(log, 'X is missing'), returns(None))
+    x, y = yield read_or(lambda: [cfg['x'], cfg['y']], returns())
     
-print handle_errors_1()
+    print x, y
 
 
 @workflow
-def handle_errors_2():
-    yield add_fail_guard(KeyError, 92)
-    yield add_fail_guard(AttributeError, lambda state: state)
-
-    yield fold(lambda x: x + 42)
-    yield fold(lambda x: x + 42)
-
-    x = {}
-    x.e
+def register_users(users):
+    @excepts(Exception)
+    def collect_exception(exception):
+        yield append(str(exception), name='errors')
     
-print handle_errors_2()
+    @allways
+    def write_log(state):
+        logger.log(state.get('errors', []), state.get('successes', []))
 
+    yield collect_exception
+    yield write_log
 
-@workflow
-def check_existence(cfg):
-    x = yield check(cfg.get('x'))
-    y = yield check(cfg.get('y'), lambda y: y>50, lambda state: 777)
-    yield returns(x+y)
-
-print check_existence({'x': 1111, 'y': 889})
-
-
-@workflow
-def check_existence_2(cfg):
-    x = yield check(cfg.get('x'))
-    y = yield check(cfg.get('y'), lambda y: y>50, 777)
-    yield returns(x+y)
-
-print check_existence_2({'x': 1111, 'y': 889})
+    for user in loop(users, collect_exception):
+        if user.is_registered is True:
+            yield append('Person is already registered', name='errors')
+        else:
+            user.register()
+            yield append('Person was registered', name='successes')

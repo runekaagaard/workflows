@@ -1,4 +1,5 @@
-@command
+from . import *
+
 def when(predicate, *commands):
     p = maybe_callable(predicate)
     assert type(p) is bool
@@ -8,39 +9,44 @@ def when(predicate, *commands):
     else:
         yield SEND, False
 
+def call(func, *args):
+    yield CALL, lambda: func(*args)
 
-@command
+def unless(predicate, *commands):
+    p = maybe_callable(predicate)
+    assert type(p) is bool
+    if not p:
+        yield DO, commands
+        yield SEND, True
+    else:
+        yield SEND, False
+
 def returns(value):
     yield RETURN, value
 
 
-@command(uses_state=True)
-def fold(callable, initial=0, key=GLOBAL, state=None):
-    set_state(state, key, callable(get_state(state, key, initial)))
-    yield SEND, new_value
+def fold(callable, initial=0, key=GLOBAL):
+    state = yield GET_STATE, None
+    state[key] = callable(state.get(key, initial))
+    yield SEND, state
 
-
-@command(uses_state=True)
 def append(value, key, state=None):
     v = get_state(state, key, [])
     v.append(value)
     set_state(state, key, v)
 
-
-@command
 def read_or(callable, *commands):
     try:
         value = callable()
+        print "value is", value
         yield SEND, value
     except (KeyError, AttributeError, IndexError):
         yield DO, commands
+        yield BREAK, None
 
-
-@command
 def excepts(callable, exception):
     exceptions = maybe_list(exception)
     yield TRY, callable, exceptions
-
 
 def loop(items, *commands):
     yield LOOP, commands

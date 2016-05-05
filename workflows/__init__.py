@@ -1,50 +1,73 @@
 from functools import wraps
 
-from .actions import CONTINUE, RETURN, ADD_FAIL_GUARD, SEND
-from .features import DEFAULT, get_state
-from .core import maybe_callable
+DO = 1
+SEND = 2
+CALL = 3
+RETURN = 4
+TRY = 5
+LOOP = 6
+GET_STATE = 7
+BREAK = 8
+
+GLOBAL = "__GLOBAL__"
+DONT_RETURN = "__DONT_RETURN__"
+
 
 def workflow(f):
     @wraps(f)
     def _workflow(*args, **kwargs):
         state = {}
-        fail_guards = {}
-        send = None
+        excepts = {}
 
+        global send_command, send, _break
+        send = None
+        send_command = None
+        _break = False
+
+        def process(command, value):
+            global send_command, send, _break
+            if command == SEND:
+                send = value
+            elif command == DO:
+                for _value in value:
+                    for __value, __command in _value:
+                        result = process(__value, __command)
+                        if result != DONT_RETURN:
+                            return result
+            elif command == RETURN:
+                return value
+            elif command == GET_STATE:
+                send_command = state
+            elif command == CALL:
+                print value()
+            elif command == BREAK:
+                _break = True
+            else:
+                raise Exception("Unknown command")
+
+            return DONT_RETURN
         try:
             generator = f(*args, **kwargs)
             while True:
-                config = generator.send(send)
-                on_next = config.get('on_next')
-                if on_next is not None:
-                    result = config['on_next'](state)
-                    if result['action'] == CONTINUE:
-                        continue
-                    elif result['action'] == RETURN:
-                        return result['result']
-                    elif result['action'] == ADD_FAIL_GUARD:
-                        fail_guards[result['exception']] = result['returns']
-                    elif result['action'] == SEND:
-                        send = result['value']
-                    else:
-                        raise Exception("Unsupported action {}.".format(
-                            result['action']))
+                commands = generator.send(send)
+                send = None
+                _break = False
+                try:
+                    while not _break:
+                        command, value = commands.send(send_command)
+                        send_command = None
+                        result = process(command, value)
+                        if result != DONT_RETURN:
+                            return result
+                except StopIteration:
+                    pass
         except StopIteration:
-            on_stop = config.get('on_stop')
-            if on_stop is not None:
-                result = config['on_stop'](state)
-                if result['action'] == RETURN:
-                    return result['result']
-                else:
-                    raise Exception("Unsupported action {}.".format(
-                        result['action']))
-        except Exception as e:
-            cls = e.__class__
-            if cls in fail_guards:
-                return maybe_callable(fail_guards[cls], 
-                                      lambda: [get_state(state)])
-            else:
-                raise
+            try:
+                return state[GLOBAL]
+            except:
+                return state
 
     return _workflow
 
+def maybe_callable(value, *args):    
+    return value(*args()) if callable(value) else value

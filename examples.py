@@ -1,17 +1,15 @@
 import random
 
 from workflows import workflow
-from workflows.features import *
+from workflows.commands import *
 
 @workflow
 def fib(n):
-    # unless is opposite of when.
     yield when(n == 0, returns(0))
-    yield when(n == 1, returns(1))
+    yield unless(n != 1, returns(1))
     yield returns(fib(n-1) + fib(n-2))
 
 print fib(10)
-
 
 @workflow
 def sums(*args):
@@ -20,22 +18,24 @@ def sums(*args):
 
 print sums(2, 4, 8, 16, 32)
 
-
 @workflow
 def sum_and_product(*args):
     for arg in args:
-        yield fold(lambda x: x*arg, initial=1, name='product')
-        yield fold(lambda x: x+arg, name='sum')
+        yield fold(lambda x: x*arg, initial=1, key='product')
+        yield fold(lambda x: x+arg, key='sum')
 
 print sum_and_product(2, 4, 8, 16, 32)
 
-
 @workflow
-def x_dot_y(cfg):
-    x = yield read_or(lambda: cfg['x'], do(log, 'X is missing'), returns(None))
-    x, y = yield read_or(lambda: [cfg['x'], cfg['y']], returns())
-    
-    print x, y
+def use_cfg(cfg):
+    def log(msg):
+        print msg
+
+    x, y = yield read_or(lambda: (cfg['x'], cfg['y']))
+    yield returns((x, y))
+
+print use_cfg({'x': 10, 'y': 20})
+import sys; sys.exit()
 
 
 @workflow

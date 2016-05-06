@@ -9,21 +9,17 @@ def when(predicate, *commands):
     else:
         yield SEND, False
 
-def call(func, *args):
-    yield CALL, lambda: func(*args)
-
 def unless(predicate, *commands):
     p = maybe_callable(predicate)
     assert type(p) is bool
     if not p:
         yield DO, commands
-        yield SEND, True
-    else:
         yield SEND, False
+    else:
+        yield SEND, True
 
 def returns(value):
     yield RETURN, value
-
 
 def fold(callable, initial=0, key=GLOBAL):
     state = yield GET_STATE, None
@@ -38,12 +34,14 @@ def append(value, key, state=None):
 def read_or(callable, *commands):
     try:
         value = callable()
-        print "value is", value
         yield SEND, value
     except (KeyError, AttributeError, IndexError):
         yield DO, commands
-        yield BREAK, None
+        yield RETURN, None
 
+def call(func, *args):
+    yield CALL, lambda: func(*args)
+    
 def excepts(callable, exception):
     exceptions = maybe_list(exception)
     yield TRY, callable, exceptions

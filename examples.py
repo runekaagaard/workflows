@@ -29,11 +29,13 @@ print sum_and_product(2, 4, 8, 16, 32)
 @workflow
 def use_cfg(cfg):
     def log(msg):
-        print msg
+        print "LOG:", msg
 
-    x, y = yield read_or(lambda: (cfg['x'], cfg['y']))
+    x, y = yield read_or(lambda: (cfg['x'], cfg['y']), 
+        call(log, 'Missing x or y'), returns(91))
     yield returns((x, y))
 
+print use_cfg({})
 print use_cfg({'x': 10, 'y': 20})
 import sys; sys.exit()
 

@@ -7,7 +7,6 @@ RETURN = 4
 TRY = 5
 LOOP = 6
 GET_STATE = 7
-BREAK = 8
 
 GLOBAL = "__GLOBAL__"
 DONT_RETURN = "__DONT_RETURN__"
@@ -19,13 +18,12 @@ def workflow(f):
         state = {}
         excepts = {}
 
-        global send_command, send, _break
+        global send_command, send
         send = None
         send_command = None
-        _break = False
 
         def process(command, value):
-            global send_command, send, _break
+            global send_command, send
             if command == SEND:
                 send = value
             elif command == DO:
@@ -39,9 +37,7 @@ def workflow(f):
             elif command == GET_STATE:
                 send_command = state
             elif command == CALL:
-                print value()
-            elif command == BREAK:
-                _break = True
+                value()
             else:
                 raise Exception("Unknown command")
 
@@ -51,9 +47,8 @@ def workflow(f):
             while True:
                 commands = generator.send(send)
                 send = None
-                _break = False
                 try:
-                    while not _break:
+                    while True:
                         command, value = commands.send(send_command)
                         send_command = None
                         result = process(command, value)

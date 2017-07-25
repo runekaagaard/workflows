@@ -21,7 +21,7 @@ def parse_step(stepped, arrows):
         return stepped, arrows.continues
 
 
-def run_workflow(func, args, kwargs, state, arrows, error_step=None):
+def worker(func, args, kwargs, state, arrows, error_step=None):
     try:
         for step in func(*args, **kwargs):
             state, arrow = parse_step(step(state), arrows)
@@ -42,11 +42,11 @@ def run_workflow(func, args, kwargs, state, arrows, error_step=None):
     return state
 
 
-def workflow(state, error_step=None, arrows=ARROWS):
+def workflow(state, error_step=None, arrows=ARROWS, worker=worker):
     def _(func):
         @wraps(func)
         def __(*args, **kwargs):
-            return run_workflow(func, args, kwargs, state, arrows, error_step)
+            return worker(func, args, kwargs, state, arrows, error_step)
 
         return __
 

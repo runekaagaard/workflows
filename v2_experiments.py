@@ -1,5 +1,6 @@
 from collections import namedtuple
 from functools import wraps
+import threading
 
 
 class WorkflowsException(Exception):
@@ -61,6 +62,57 @@ def aborts():
     return lambda state: (state, ARROWS.aborts)
 
 
+import operator
+
+
+class State(object):
+    def __init__(self):
+        self.ops = []
+
+    def __add__(self, x):
+        self.ops.append(lambda state: operator.__add__(state, x))
+        return self
+
+    def __radd__(self, x):
+        self.ops.append(lambda state: operator.__add__(state, x))
+        return self
+
+    def __sub__(self, x):
+        self.ops.append(lambda state: operator.__sub__(state, x))
+        return self
+
+    def __rsub__(self, x):
+        self.ops.append(lambda state: operator.__sub__(state, x))
+        return self
+
+    def __gt__(self, x):
+        self.ops.append(lambda state: state > x)
+        return self
+
+    def append(self, x):
+        def get(state, x):
+            state.append(x)
+            return state
+
+        self.ops.append(lambda state: get(state, x))
+        return self
+
+    def __call__(self, state):
+        for op in self.ops:
+            state = op(state)
+
+        self.ops = []
+        return state
+
+
+def append(x):
+    return lambda state: state + [x]
+
+
+local = threading.local()
+local.state = State()
+S = local.state
+
 twelve_sucks = lambda state: state + 1213
 
 
@@ -77,7 +129,17 @@ def sums(xs):
         if x > 16:
             raise Exception("Noooo")
             yield aborts()
-        yield lambda state: state + x
+        #yield lambda s: s + x
+        yield S + x
+
+
+@workflow(state=[])
+def square(xs):
+    for x in xs:
+        yield S.append(x**2)
+        yield lambda s: s + [x**2]
+        yield append(x**2)
 
 
 print sums(range(30))
+print square(range(5))

@@ -77,7 +77,7 @@ def sums(xs):
         if x > 16:
             raise Exception("Noooo")
             yield aborts()
-        yield reduces(lambda state: state + x)
+        yield lambda state: state + x
 
 
 print sums(range(30))

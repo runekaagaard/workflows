@@ -6,6 +6,9 @@ class InvalidArrowException(Exception):
     pass
 
 
+ARROWS = namedtuple('ARROWS', 'continues aborts')("_continues_", "_aborts_")
+
+
 def run_workflow(func, args, kwargs, state, error_step=None):
     def parse_step(stepped):
         if type(stepped) is tuple:
@@ -13,12 +16,9 @@ def run_workflow(func, args, kwargs, state, error_step=None):
         else:
             return stepped, ARROWS.continues
 
-    ARROWS = namedtuple('ARROWS', 'continues aborts')("_continues_",
-                                                      "_aborts_")
     try:
         for step in func(*args, **kwargs):
             state, arrow = parse_step(step(state, ARROWS))
-
             if arrow == ARROWS.continues:
                 continue
             elif arrow == ARROWS.aborts:
@@ -46,18 +46,18 @@ def workflow(state, error_step):
 
 
 def reduces(reducer):
-    return lambda state, arrows: reducer(state)
+    return lambda state: reducer(state)
 
 
 def aborts():
-    return lambda state, arrows: (state, arrows.aborts)
+    return lambda state: (state, ARROWS.aborts)
 
 
-def twelve_sucks(state, arrows):
+def twelve_sucks(state):
     return state + 1213
 
 
-def sums_error(exception, state, arrows):
+def sums_error(exception, state):
     return state + 10**6
 
 

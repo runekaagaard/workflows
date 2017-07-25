@@ -2,36 +2,42 @@ from collections import namedtuple
 from functools import wraps
 
 
-class InvalidArrowException(Exception):
+class WorkflowsException(Exception):
     pass
 
 
-ARROWS = namedtuple('ARROWS', 'continues aborts')("_continues_", "_aborts_")
+class InvalidArrowError(WorkflowsException):
+    pass
+
+
+ARROWS = namedtuple('ARROWS', 'continues aborts')(
+    "_workflows_arrow_continues_", "_workflows_arrow_aborts_")
+
+
+def parse_step(stepped, arrows):
+    if type(stepped) is tuple and stepped[1] in arrows:
+        return stepped
+    else:
+        return stepped, arrows.continues
 
 
 def run_workflow(func, args, kwargs, state, arrows, error_step=None):
-    def parse_step(stepped):
-        if type(stepped) is tuple:
-            return stepped
-        else:
-            return stepped, arrows.continues
-
     try:
         for step in func(*args, **kwargs):
-            state, arrow = parse_step(step(state))
+            state, arrow = parse_step(step(state), arrows)
             if arrow == arrows.continues:
                 continue
             elif arrow == arrows.aborts:
                 return state
             else:
-                raise InvalidArrowException()
+                raise InvalidArrowError()
     except Exception as exception:
-        if isinstance(exception, InvalidArrowException) or error_step is None:
+        if isinstance(exception, WorkflowsException) or error_step is None:
             raise
         else:
-            state, arrow = parse_step(error_step(exception, state))
+            state, arrow = parse_step(error_step(exception, state), arrows)
             if not arrow in arrows:
-                raise InvalidArrowException()
+                raise InvalidArrowError()
 
     return state
 

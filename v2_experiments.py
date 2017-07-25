@@ -9,19 +9,19 @@ class InvalidArrowException(Exception):
 ARROWS = namedtuple('ARROWS', 'continues aborts')("_continues_", "_aborts_")
 
 
-def run_workflow(func, args, kwargs, state, error_step=None):
+def run_workflow(func, args, kwargs, state, arrows, error_step=None):
     def parse_step(stepped):
         if type(stepped) is tuple:
             return stepped
         else:
-            return stepped, ARROWS.continues
+            return stepped, arrows.continues
 
     try:
         for step in func(*args, **kwargs):
-            state, arrow = parse_step(step(state, ARROWS))
-            if arrow == ARROWS.continues:
+            state, arrow = parse_step(step(state))
+            if arrow == arrows.continues:
                 continue
-            elif arrow == ARROWS.aborts:
+            elif arrow == arrows.aborts:
                 return state
             else:
                 raise InvalidArrowException()
@@ -29,16 +29,18 @@ def run_workflow(func, args, kwargs, state, error_step=None):
         if isinstance(exception, InvalidArrowException) or error_step is None:
             raise
         else:
-            state, arrow = parse_step(error_step(exception, state, ARROWS))
+            state, arrow = parse_step(error_step(exception, state))
+            if not arrow in arrows:
+                raise InvalidArrowException()
 
     return state
 
 
-def workflow(state, error_step):
+def workflow(state, error_step=None, arrows=ARROWS):
     def _(func):
         @wraps(func)
         def __(*args, **kwargs):
-            return run_workflow(func, args, kwargs, state, error_step)
+            return run_workflow(func, args, kwargs, state, arrows, error_step)
 
         return __
 
@@ -53,8 +55,7 @@ def aborts():
     return lambda state: (state, ARROWS.aborts)
 
 
-def twelve_sucks(state):
-    return state + 1213
+twelve_sucks = lambda state: state + 1213
 
 
 def sums_error(exception, state):

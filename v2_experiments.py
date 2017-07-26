@@ -108,8 +108,7 @@ def sums(xs):
         if x > 16:
             raise Exception("Noooo")
             yield aborts()
-        #yield lambda s: s + x
-        yield S + x
+        yield lambda s: s + x
 
 
 @workflow(state=list)

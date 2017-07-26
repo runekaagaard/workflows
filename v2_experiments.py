@@ -73,53 +73,10 @@ def reduces(reducer):
 
 
 def aborts():
-    return lambda state: (state, ARROWS.aborts)
+    return lambda state: stepped(state, arrow=ARROWS.aborts)
 
 
-import operator
-
-
-class State(object):
-    def __init__(self):
-        self.ops = []
-
-    def __add__(self, x):
-        self.ops.append(lambda state: operator.__add__(state, x))
-        return self
-
-    def __radd__(self, x):
-        self.ops.append(lambda state: operator.__add__(state, x))
-        return self
-
-    def __sub__(self, x):
-        self.ops.append(lambda state: operator.__sub__(state, x))
-        return self
-
-    def __rsub__(self, x):
-        self.ops.append(lambda state: operator.__sub__(state, x))
-        return self
-
-    def __gt__(self, x):
-        self.ops.append(lambda state: state > x)
-        return self
-
-    def append(self, x):
-        def get(state, x):
-            state.append(x)
-            return state
-
-        self.ops.append(lambda state: get(state, x))
-        return self
-
-    def __call__(self, state):
-        for op in self.ops:
-            state = op(state)
-
-        self.ops = []
-        return state
-
-
-def append(x):
+def appends(x):
     def step(state):
         state.append(x)
         return state
@@ -130,10 +87,6 @@ def append(x):
 def calls(func, *args, **kwargs):
     return lambda state: stepped(state, send=func(*args, **kwargs))
 
-
-local = threading.local()
-local.state = State()
-S = local.state
 
 twelve_sucks = lambda state: state + 1213
 
@@ -163,11 +116,9 @@ def sums(xs):
 def square(xs):
     for x in xs:
         foo = yield calls(bar, x, 10)
-        yield append(foo)
-        yield S.append(x**2)
+        yield appends(foo)
         yield lambda s: s + [x**2]
-        yield append(x**2)
-        yield lambda s: 9
+        yield appends(x**2)
 
 
 print sums(range(30))

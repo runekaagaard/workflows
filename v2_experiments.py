@@ -114,8 +114,7 @@ def sums(xs):
 @workflow(state=list)
 def square(xs):
     for x in xs:
-        foo = yield calls(bar, x, 10)
-        yield appends(foo)
+        yield appends((yield calls(bar, x, 10)))
         yield lambda s: s + [x**2]
         yield appends(x**2)
 

@@ -167,6 +167,7 @@ def square(xs):
         yield S.append(x**2)
         yield lambda s: s + [x**2]
         yield append(x**2)
+        yield lambda s: 9
 
 
 print sums(range(30))

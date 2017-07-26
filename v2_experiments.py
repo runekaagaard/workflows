@@ -1,6 +1,7 @@
 from collections import namedtuple
 from functools import wraps
 import threading
+import inspect
 
 
 class WorkflowsException(Exception):
@@ -27,7 +28,11 @@ def parse_step(state_or_stepped, arrows):
         return stepped(state_or_stepped)
 
 
-def worker(func, args, kwargs, state, arrows, error_step=None):
+def worker(func, args, kwargs, state, arrows, error_step, pre, post):
+    for p in listify(pre):
+        assert p(
+            *args, **kwargs
+        ) is not False, u"Precondition failed: " + inspect.getsource(p)
     try:
         generator = func(*args, **kwargs)
         send = None
@@ -40,7 +45,7 @@ def worker(func, args, kwargs, state, arrows, error_step=None):
             if arrow == arrows.continues:
                 continue
             elif arrow == arrows.aborts:
-                return state
+                break
             else:
                 raise InvalidArrowError(arrow)
     except Exception as exception:
@@ -52,16 +57,25 @@ def worker(func, args, kwargs, state, arrows, error_step=None):
             if not arrow in arrows:
                 raise InvalidArrowError(arrow)
 
+    for p in listify(post):
+        assert p(
+            *args, **kwargs
+        ) is not False, u"Postcondition failed: " + inspect.getsource(p)
     return state
 
 
-def workflow(state, error_step=None, arrows=ARROWS, worker=worker):
+def workflow(state,
+             error_step=None,
+             arrows=ARROWS,
+             worker=worker,
+             pre=lambda *args, **kwargs: None,
+             post=lambda state: None):
     def _(func):
         @wraps(func)
         def __(*args, **kwargs):
             return worker(func, args, kwargs,
-                          state()
-                          if callable(state) else state, arrows, error_step)
+                          state() if callable(state) else state, arrows,
+                          error_step, pre, post)
 
         return __
 
@@ -111,7 +125,18 @@ def sums(xs):
         yield lambda s: s + x
 
 
-@workflow(state=list)
+def listify(func_or_list):
+    if callable(func_or_list):
+        return [func_or_list]
+    else:
+        return func_or_list
+
+
+def square_pre(xs):
+    assert len(xs) < 10
+
+
+@workflow(state=list, pre=lambda xs: len(xs) < 1, post=lambda s: len(s) < 9)
 def square(xs):
     for x in xs:
         yield appends((yield calls(bar, x, 10)))
@@ -122,4 +147,4 @@ def square(xs):
 print sums(range(30))
 print sums(range(30))
 print square(range(5))
-print square(range(5))
+print square(range(10))

@@ -52,7 +52,7 @@ def worker(func, args, kwargs, state, arrows, error_step, pre, post):
             try:
                 steps = generator.send(send)
             except StopIteration:
-                break
+                return output(state, post)
             for step in listify(steps):
                 if hasattr(step, 'is_workflow'):
                     state, send, arrow = parse_step(
@@ -71,8 +71,7 @@ def worker(func, args, kwargs, state, arrows, error_step, pre, post):
         else:
             state, send, arrow = parse_step(
                 error_step(exception, state), arrows)
-
-    return output(state, post)
+            return output(state, post)
 
 
 def workflow(state,

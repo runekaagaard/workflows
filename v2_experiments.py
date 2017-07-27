@@ -38,31 +38,37 @@ def parse_conditions(condition_s, args, kwargs, err_msg):
 
 
 def worker(func, args, kwargs, state, arrows, error_step, pre, post):
+    def output(state, post):
+        parse_conditions(post, (state, ), {},
+                         "Postcondition nr. {} failed: {}")
+
+        return state
+
     parse_conditions(pre, args, kwargs, "Precondition nr. {} failed: {}")
     try:
         generator = func(*args, **kwargs)
         send = None
         while True:
             try:
-                step = generator.send(send)
+                steps = generator.send(send)
             except StopIteration:
                 break
-            state, send, arrow = parse_step(step(state), arrows)
-            if arrow == arrows.continues:
-                continue
-            elif arrow == arrows.aborts:
-                break
-            else:
-                raise InvalidArrowError(arrow)
+            for step in listify(steps):
+                state, send, arrow = parse_step(step(state), arrows)
+                if arrow == arrows.continues:
+                    continue
+                elif arrow == arrows.aborts:
+                    return output(state, post)
+                else:
+                    raise InvalidArrowError(arrow)
     except Exception as exception:
         if isinstance(exception, WorkflowsException) or error_step is None:
             raise
         else:
             state, send, arrow = parse_step(
                 error_step(exception, state), arrows)
-    parse_conditions(post, (state, ), {}, "Postcondition nr. {} failed: {}")
 
-    return state
+    return output(state, post)
 
 
 def workflow(state,
@@ -137,12 +143,12 @@ def square_pre(xs):
     assert len(xs) < 10
 
 
-@workflow(state=list, pre=lambda xs: len(xs) < 20, post=lambda s: len(s) < 31)
+@workflow(state=list, pre=lambda xs: len(xs) < 20, post=lambda s: len(s) < 310)
 def square(xs):
     for x in xs:
         yield appends((yield calls(bar, x, 10)))
         yield lambda s: s + [x**2]
-        yield appends(x**2)
+        yield appends(x**2), appends(x**3)
 
 
 print sums(range(30))

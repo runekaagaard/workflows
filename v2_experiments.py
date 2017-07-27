@@ -50,7 +50,6 @@ def worker(func, args, kwargs, state, arrows, error_step, pre, post):
     def output(state, post):
         parse_conditions(post, (state, ), {},
                          "Postcondition nr. {} failed: {}")
-
         return state
 
     parse_conditions(pre, args, kwargs, "Precondition nr. {} failed: {}")

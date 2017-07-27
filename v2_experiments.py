@@ -23,7 +23,7 @@ def stepped(state, send=None, arrow=ARROWS.continues):
 
 def parse_step(state_or_stepped, arrows):
     if isinstance(state_or_stepped, Stepped):
-        if not stepped.arrow in arrows:
+        if state_or_stepped.arrow not in arrows:
             raise InvalidArrowError(arrow)
         return state_or_stepped
     else:
@@ -48,6 +48,8 @@ def worker(func, args, kwargs, state, arrows, error_step, pre, post):
             except StopIteration:
                 break
             state, send, arrow = parse_step(step(state), arrows)
+            if arrow == arrows.continues:
+                continue
             elif arrow == arrows.aborts:
                 break
             else:

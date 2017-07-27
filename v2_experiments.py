@@ -73,7 +73,7 @@ def worker(func, args, kwargs, state, arrows, error_step, pre, post):
         if isinstance(exception, WorkflowsException) or error_step is None:
             raise
         else:
-            state, send, arrow = run_step(step, state, ARROWS)
+            state, send, arrow = run_step(error_step, state, ARROWS, exception)
             return output(state, post)
 
 
@@ -126,7 +126,7 @@ def calls(func, *args, **kwargs):
 twelve_sucks = lambda state: state + 1213
 
 
-def sums_error(exception, state):
+def sums_error(state, exception):
     return state + 10**6
 
 

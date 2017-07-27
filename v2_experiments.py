@@ -28,11 +28,15 @@ def parse_step(state_or_stepped, arrows):
         return stepped(state_or_stepped)
 
 
+def parse_conditions(condition_s, args, kwargs, err_msg):
+    for i, condition in enumerate(listify(condition_s), 1):
+        assert condition(*args, **
+                         kwargs) is not False, unicode(err_msg).format(
+                             i, unicode(inspect.getsource(condition)))
+
+
 def worker(func, args, kwargs, state, arrows, error_step, pre, post):
-    for p in listify(pre):
-        assert p(
-            *args, **kwargs
-        ) is not False, u"Precondition failed: " + inspect.getsource(p)
+    parse_conditions(pre, args, kwargs, "Precondition nr. {} failed: {}")
     try:
         generator = func(*args, **kwargs)
         send = None
@@ -56,11 +60,8 @@ def worker(func, args, kwargs, state, arrows, error_step, pre, post):
                 error_step(exception, state), arrows)
             if not arrow in arrows:
                 raise InvalidArrowError(arrow)
+    parse_conditions(post, (state, ), {}, "Postcondition nr. {} failed: {}")
 
-    for p in listify(post):
-        assert p(
-            *args, **kwargs
-        ) is not False, u"Postcondition failed: " + inspect.getsource(p)
     return state
 
 
@@ -136,7 +137,7 @@ def square_pre(xs):
     assert len(xs) < 10
 
 
-@workflow(state=list, pre=lambda xs: len(xs) < 1, post=lambda s: len(s) < 9)
+@workflow(state=list, pre=lambda xs: len(xs) < 20, post=lambda s: len(s) < 31)
 def square(xs):
     for x in xs:
         yield appends((yield calls(bar, x, 10)))

@@ -21,13 +21,22 @@ def stepped(state, send=None, arrow=ARROWS.continues):
     return Stepped(state=state, send=send, arrow=arrow)
 
 
-def parse_step(state_or_stepped, arrows):
-    if isinstance(state_or_stepped, Stepped):
-        if state_or_stepped.arrow not in arrows:
-            raise InvalidArrowError(arrow)
-        return state_or_stepped
-    else:
-        return stepped(state_or_stepped)
+def run_step(step, state, arrows, exception=None):
+    def parse_step(state_or_stepped, arrows):
+        if isinstance(state_or_stepped, Stepped):
+            if state_or_stepped.arrow not in arrows:
+                raise InvalidArrowError(arrow)
+            return state_or_stepped
+        else:
+            return stepped(state_or_stepped)
+
+    args, kwargs = [state], {}
+    if exception is not None:
+        args.append(exception)
+    if hasattr(step, 'is_workflow'):
+        kwargs['inject_state'] = state
+
+    return parse_step(step(*args, **kwargs), arrows)
 
 
 def parse_conditions(condition_s, args, kwargs, err_msg):
@@ -54,11 +63,7 @@ def worker(func, args, kwargs, state, arrows, error_step, pre, post):
             except StopIteration:
                 return output(state, post)
             for step in listify(steps):
-                if hasattr(step, 'is_workflow'):
-                    state, send, arrow = parse_step(
-                        step(state, inject_state=state), arrows)
-                else:
-                    state, send, arrow = parse_step(step(state), arrows)
+                state, send, arrow = run_step(step, state, ARROWS)
                 if arrow == arrows.continues:
                     continue
                 elif arrow == arrows.aborts:
@@ -69,8 +74,7 @@ def worker(func, args, kwargs, state, arrows, error_step, pre, post):
         if isinstance(exception, WorkflowsException) or error_step is None:
             raise
         else:
-            state, send, arrow = parse_step(
-                error_step(exception, state), arrows)
+            state, send, arrow = run_step(step, state, ARROWS)
             return output(state, post)
 
 
@@ -160,6 +164,8 @@ def append_two_and_three(xs):
 
 @workflow(state=list, pre=lambda xs: len(xs) < 20, post=lambda s: len(s) < 310)
 def square(xs):
+    yield append_two_and_three
+
     for x in xs:
         yield appends((yield calls(bar, x, 10)))
         yield lambda s: s + [x**2]

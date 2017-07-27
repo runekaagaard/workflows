@@ -88,13 +88,15 @@ def workflow(state,
 
         @wraps(func)
         def __(*args, **kwargs):
-            inject_state = kwargs.get('inject_state')
-            if inject_state is not None:
+            if 'inject_state' in kwargs:
+                inject_state = kwargs['inject_state']
                 del kwargs['inject_state']
+            else:
+                inject_state = "_no_wf"
             return worker(func, args, kwargs, inject_state
-                          if inject_state else (state()
-                                                if callable(state) else state),
-                          arrows, error_step, pre, post)
+                          if inject_state != '_no_wf' else
+                          (state() if callable(state) else
+                           state), arrows, error_step, pre, post)
 
         return __
 

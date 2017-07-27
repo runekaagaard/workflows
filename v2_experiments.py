@@ -54,7 +54,11 @@ def worker(func, args, kwargs, state, arrows, error_step, pre, post):
             except StopIteration:
                 break
             for step in listify(steps):
-                state, send, arrow = parse_step(step(state), arrows)
+                if hasattr(step, 'is_workflow'):
+                    state, send, arrow = parse_step(
+                        step(state, inject_state=state), arrows)
+                else:
+                    state, send, arrow = parse_step(step(state), arrows)
                 if arrow == arrows.continues:
                     continue
                 elif arrow == arrows.aborts:
@@ -78,11 +82,17 @@ def workflow(state,
              pre=lambda *args, **kwargs: None,
              post=lambda state: None):
     def _(func):
+        func.is_workflow = True
+
         @wraps(func)
         def __(*args, **kwargs):
-            return worker(func, args, kwargs,
-                          state() if callable(state) else state, arrows,
-                          error_step, pre, post)
+            inject_state = kwargs.get('inject_state')
+            if inject_state is not None:
+                del kwargs['inject_state']
+            return worker(func, args, kwargs, inject_state
+                          if inject_state else (state()
+                                                if callable(state) else state),
+                          arrows, error_step, pre, post)
 
         return __
 
@@ -132,15 +142,21 @@ def sums(xs):
         yield lambda s: s + x
 
 
-def listify(func_or_list):
-    if callable(func_or_list):
-        return [func_or_list]
+def listify(func_s):
+    if callable(func_s):
+        return [func_s]
     else:
-        return func_or_list
+        return func_s
 
 
 def square_pre(xs):
     assert len(xs) < 10
+
+
+@workflow(state=lambda *a, **ka: [])
+def append_two_and_three(xs):
+    yield appends(2)
+    yield appends(3)
 
 
 @workflow(state=list, pre=lambda xs: len(xs) < 20, post=lambda s: len(s) < 310)
@@ -149,6 +165,8 @@ def square(xs):
         yield appends((yield calls(bar, x, 10)))
         yield lambda s: s + [x**2]
         yield appends(x**2), appends(x**3)
+
+    yield append_two_and_three
 
 
 print sums(range(30))

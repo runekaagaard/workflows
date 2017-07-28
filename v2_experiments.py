@@ -21,7 +21,16 @@ def stepped(state, send=None, arrow=ARROWS.continues):
     return Stepped(state=state, send=send, arrow=arrow)
 
 
-def run_step(step, state, arrows, exception=None):
+def run_step(step,
+             state,
+             args,
+             kwargs,
+             arrows,
+             error_step,
+             worker,
+             pre,
+             post,
+             exception=None):
     def parse_step(state_or_stepped, arrows):
         if isinstance(state_or_stepped, Stepped):
             if state_or_stepped.arrow not in arrows:
@@ -30,13 +39,15 @@ def run_step(step, state, arrows, exception=None):
         else:
             return stepped(state_or_stepped)
 
-    args, kwargs = [state], {}
-    if exception is not None:
-        args.append(exception)
     if hasattr(step, 'is_workflow'):
-        kwargs['inject_state'] = state
-
-    return parse_step(step(*args, **kwargs), arrows)
+        return parse_step(
+            step.wf_undecorate2(lambda: state, error_step, arrows, worker, pre,
+                                post)(step.wf_undecorate1)(*args, **kwargs),
+            arrows)
+    else:
+        return parse_step(
+            step(*([state] if exception is None else [state, exception])),
+            arrows)
 
 
 def parse_conditions(condition_s, args, kwargs, err_msg):
@@ -62,7 +73,9 @@ def worker(func, args, kwargs, state, arrows, error_step, pre, post):
             except StopIteration:
                 return output(state, post)
             for step in listify(steps):
-                state, send, arrow = run_step(step, state, ARROWS)
+                state, send, arrow = run_step(step, state, args, kwargs,
+                                              ARROWS, error_step, worker, pre,
+                                              post)
                 if arrow == arrows.continues:
                     continue
                 elif arrow == arrows.aborts:
@@ -73,7 +86,9 @@ def worker(func, args, kwargs, state, arrows, error_step, pre, post):
         if isinstance(exception, WorkflowsException) or error_step is None:
             raise
         else:
-            state, send, arrow = run_step(error_step, state, ARROWS, exception)
+            state, send, arrow = run_step(error_step, state, args, kwargs,
+                                          ARROWS, error_step, worker, pre,
+                                          post, exception)
             return output(state, post)
 
 
@@ -85,18 +100,14 @@ def workflow(state,
              post=lambda state: None):
     def _(func):
         func.is_workflow = True
+        func.wf_undecorate1 = func
+        func.wf_undecorate2 = workflow
 
         @wraps(func)
         def __(*args, **kwargs):
-            if 'inject_state' in kwargs:
-                inject_state = kwargs['inject_state']
-                del kwargs['inject_state']
-            else:
-                inject_state = "_no_wf"
-            return worker(func, args, kwargs, inject_state
-                          if inject_state != '_no_wf' else
-                          (state() if callable(state) else
-                           state), arrows, error_step, pre, post)
+            return worker(func, args, kwargs,
+                          state() if callable(state) else state, arrows,
+                          error_step, pre, post)
 
         return __
 

@@ -49,6 +49,17 @@ def run_step(step,
             step(*([state] if exception is None else [state, exception])),
             arrows)
 
+def run_step2(step, state):
+    def parse_step(state_or_stepped, arrows):
+        if isinstance(state_or_stepped, Stepped):
+            if state_or_stepped.arrow not in arrows:
+                raise InvalidArrowError(arrow)
+            return state_or_stepped
+        else:
+            return stepped(state_or_stepped)
+    
+    return getattr(step, 'wf_run_step', step)(state)
+    
 
 def parse_conditions(condition_s, args, kwargs, err_msg):
     for i, condition in enumerate(listify(condition_s), 1):
@@ -90,6 +101,10 @@ def worker(func, args, kwargs, state, arrows, error_step, pre, post):
                                           ARROWS, error_step, worker, pre,
                                           post, exception)
             return output(state, post)
+
+
+
+
 
 
 def workflow(state,
@@ -168,25 +183,104 @@ def square_pre(xs):
     assert len(xs) < 10
 
 
-@workflow(state=lambda *a, **ka: [])
+from functools import update_wrapper
+
+def chain_wrap(func, wrapper_s):
+    wrapped = func
+    for wrapper in listify(wrapper_s):
+        wrapped = wrapper(wrapped)
+
+    #update_wrapper(func, wrapped)
+    
+    return wrapped
+
+
+def worker2(state, generator, wrap_generator, wrap_step):
+    state = state() if callable(state) else state
+    generator = chain_wrap(generator, wrap_generator)
+    send = None
+    while True:
+        try:
+            steps = generator.send(send)
+        except StopIteration:
+            return state
+        for step in listify(steps):
+            step = chain_wrap(step, wrap_step)
+            state, send, arrow = step(state), None, ARROWS.continues
+            if isinstance(state, Stepped):
+                state, send, arrow = state
+
+            if arrow == ARROWS.continues:
+                continue
+            elif arrow == ARROWS.aborts:
+                return state
+            else:
+                raise InvalidArrowError(arrow)
+    
+    return state
+
+
+def wf_kwargs(kwargs, keys, values):
+    def _(key, value):
+        wf_key = 'wf_' + key
+        if wf_key in kwargs:
+            tmp = kwargs[wf_key]
+            del kwargs[wf_key]
+            return tmp
+        else:
+            return value
+        
+        
+    return [_(x, y) for x, y in zip(keys, values)]
+
+def empty_workflow(state, worker=worker2, generator_wrapper=lambda x: x, 
+                   step_wrapper=lambda x: x):
+    
+    def _(func):
+        func.wf_state = state
+        @wraps(func)
+        def __(*args, **kwargs):
+            state, = wf_kwargs(kwargs, ['state'], [func.wf_state])
+            print state
+            return worker(state, func(*args, **kwargs), generator_wrapper, 
+                          step_wrapper)
+        
+        return __
+    
+    return _
+
+def include(func, *args, **kwargs):
+    def _(state):
+        return func(*args, wf_state=state, **kwargs)
+        
+    return _
+
+
+@empty_workflow(state=lambda *a, **ka: [])
 def append_two_and_three(xs):
+    print "YOYO"
     yield appends(2)
     yield appends(3)
 
 
-@workflow(state=list, pre=lambda xs: len(xs) < 20, post=lambda s: len(s) < 310)
+@empty_workflow(
+    state=list, 
+    #pre=lambda xs: len(xs) < 20, 
+    #post=lambda s: len(s) < 310
+)
 def square(xs):
-    yield append_two_and_three
+    yield include(append_two_and_three, xs)
 
     for x in xs:
         yield appends((yield calls(bar, x, 10)))
         yield lambda s: s + [x**2]
         yield appends(x**2), appends(x**3)
 
-    yield append_two_and_three
+    yield include(append_two_and_three, xs)
 
 
-print sums(range(30))
-print sums(range(30))
+#print sums(range(30))
+#print sums(range(30))
 print square(range(5))
-print square(range(10))
+#print square(range(10))
+

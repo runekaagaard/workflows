@@ -1,5 +1,5 @@
 from collections import namedtuple
-from functools import wraps, update_wrapper
+from functools import wraps
 import threading
 import inspect
 
@@ -32,12 +32,18 @@ def aborts():
     return lambda state: stepped(state, arrow=ARROWS.aborts)
 
 
+def mark_advanced(step):
+    step.advanced_step=True
+    return step
+
+
 def appends(x):
-    def step(state):
+    def step(state, **kwargs):
         state.append(x)
         return state
 
-    return step
+
+    return mark_advanced(step)
 
 
 def calls(func, *args, **kwargs):
@@ -67,13 +73,12 @@ def chain_wrap(func, wrapper_s):
     for wrapper in listify(wrapper_s):
         wrapped = wrapper(wrapped)
 
-    #update_wrapper(func, wrapped)
-    
     return wrapped
 
 
 def worker(state, generator, wrap_generator, wrap_step):
     state = state() if callable(state) else state
+    worker_state = {}
     generator = chain_wrap(generator, wrap_generator)
     send = None
     while True:
@@ -82,8 +87,16 @@ def worker(state, generator, wrap_generator, wrap_step):
         except StopIteration:
             return state
         for step in listify(steps):
+            if hasattr(step, 'advanced_step'):
+                kwargs = dict(
+                    generator=generator, wrap_generator=wrap_generator, 
+                    wrap_step=wrap_step, last_send=send, 
+                    worker_state=worker_state,
+                )
+            else:
+                kwargs = {}
             step = chain_wrap(step, wrap_step)
-            state, send, arrow = step(state), None, ARROWS.continues
+            state, send, arrow = step(state, **kwargs), None, ARROWS.continues
             if isinstance(state, Stepped):
                 state, send, arrow = state
 
@@ -188,6 +201,6 @@ def square(xs):
 
 print sums(range(30))
 #print sums(range(30))
-#print square(range(5))
+print square(range(5))
 #print square(range(10))
 

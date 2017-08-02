@@ -1,4 +1,4 @@
-from collections import namedtuple
+from collections import namedtuple, deque
 from functools import wraps
 import threading
 import inspect
@@ -123,13 +123,13 @@ def wf_kwargs(kwargs, keys, values):
     return [_(x, y) for x, y in zip(keys, values)]
 
 
-def empty_workflow(state, worker=worker, generator_wrapper=lambda x: x, 
+def empty_workflow(state=None, worker=worker, generator_wrapper=lambda x: x, 
                    step_wrapper=lambda x: x):
     
     def _(func):
         @wraps(func)
         def __(*args, **kwargs):
-            worker2, state2, generator_wrapper2, step_wrapper2= wf_kwargs(
+            worker2, state2, generator_wrapper2, step_wrapper2 = wf_kwargs(
                 kwargs, 
                 ['worker', 'state', 'generator_wrapper', 'step_wrapper'], 
                 [worker, state, generator_wrapper, step_wrapper],
@@ -199,8 +199,58 @@ def square(xs):
     yield include(append_two_and_three)
 
 
-print sums(range(30))
+def conj(x):
+    def clist(state, x):
+        state.append(x)
+        return state
+
+    def cset(state, x):
+        state.add(x)
+        return state
+
+    def ctuple(state, x):
+        return state + (x, )
+
+    def cdeque(state, x):
+        state.append(x)
+        return state
+
+    key = 'workflows.conj'
+    def _(state, **kwargs):
+        ws = kwargs['worker_state']
+        func = ws.get(key, None)
+        if func is None:
+            if isinstance(state, list):
+                func = clist
+            elif isinstance(state, set):
+                func = cset
+            elif isinstance(state, tuple):
+                func = ctuple
+            elif isinstance(state, deque):
+                func = cdeque
+            else:
+                raise WorkflowsException("Unkown type for conj: {}".format(
+                    state))
+            ws[key] = func
+
+        return func(state, x)
+
+    return mark_advanced(_)
+
+@empty_workflow()
+def pow_of_3(xs):
+    yield lambda s: type(xs)()
+    for x in xs:
+        yield conj(x**3)
+
+
+print pow_of_3(range(4))
+print pow_of_3(set(range(4)))
+print pow_of_3(tuple(range(4)))
+print pow_of_3(deque(range(4)))
+
 #print sums(range(30))
-print square(range(5))
+#print sums(range(30))
+#print square(range(5))
 #print square(range(10))
 
